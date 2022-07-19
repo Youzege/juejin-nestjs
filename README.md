@@ -558,5 +558,55 @@ YAML的了解点击[链接](https://link.juejin.cn/?target=https%3A%2F%2Fbaike.b
    bootstrap();
    ```
 
+4. 修改启动脚本启动命令
+
+   ```json
+   "start:hot": "cross-env RUNNING_ENV=dev nest build --webpack --webpackPath webpack-hmr.config.js --watch"
+   ```
+
+
+
+#### Swagger文档
+
+后端服务，**API** 文档是必不可少的，除了接口描述、参数描述之外，自测也十分方便。`NestJS` 自带了 `Swagger` 文档，集成非常简单，接下来进行文档的配置部分。
+
+1. 安装 文档 依赖
+
+   `yarn add @nestjs/swagger fastify-swagger`
+
    
 
+2. 创建 `src/doc.ts` 文件
+
+   ```ts
+   // src/doc.ts
+   
+   import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+   import * as packageConfig from '../package.json'
+   
+   export const generateDocument = (app) => {
+   
+     const options = new DocumentBuilder()
+       .setTitle(packageConfig.name)
+       .setDescription(packageConfig.description)
+       .setVersion(packageConfig.version)
+       .build();
+   
+     const document = SwaggerModule.createDocument(app, options);
+   
+     SwaggerModule.setup('/api/doc', app, document);
+   }
+   ```
+
+   
+
+3. 在 `main.ts` 中引入方法
+
+   ```ts
+   // main.ts
+   
+    // 创建文档
+     generateDocument(app)
+   ```
+
+   [Swagger UI ](http://localhost:3000/api/doc)查看API文档
