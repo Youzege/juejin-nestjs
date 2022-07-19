@@ -1,3 +1,12 @@
+## [0.0.3](https://github.com/Youzege/juejin-nestjs/compare/v0.0.2...v0.0.3) (2022-07-19)
+
+
+### Features
+
+* 新增CHANGELOG，readme 更新conventional-changelog-cli基本说明 ([ba62358](https://github.com/Youzege/juejin-nestjs/commit/ba623582dd6acc1e37d9bd524b2d168fa5d1ab1d))
+
+
+
 ## [0.0.2](https://github.com/Youzege/juejin-nestjs/compare/b499614a64050fd08ad16370be612cc7bdf28d3c...v0.0.2) (2022-07-19)
 
 
