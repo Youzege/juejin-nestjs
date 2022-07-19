@@ -7,6 +7,38 @@
 
 
 
+## 额外的 CHANGELOG 配置
+
+**`conventional-changelog-cli`**
+
+从 git 元数据生成更改日志
+
+```
+$ npm install -g conventional-changelog-cli
+$ cd my-project
+$ conventional-changelog -p angular -i CHANGELOG.md -s
+```
+
+第一次使用此工具，并且想要生成所有以前的更改日志，则可以执行以下操作。*这将*覆盖任何以前的更改日志（如果存在）。
+
+```
+$ conventional-changelog -p angular -i CHANGELOG.md -s -r 0
+```
+
+### `npm version`
+
+通过以下钩子使用 npm 脚本来发挥我们的优势
+
+```json
+{
+  "scripts": {
+    "version": "conventional-changelog -p angular -i CHANGELOG.md -s && git add CHANGELOG.md"
+  }
+}
+```
+
+
+
 ## Nest 初
 
 ### 一、工程创建
