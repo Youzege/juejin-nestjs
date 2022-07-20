@@ -1,4 +1,8 @@
-import { VersioningType, VERSION_NEUTRAL } from '@nestjs/common';
+import {
+  ValidationPipe,
+  VersioningType,
+  VERSION_NEUTRAL,
+} from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -18,11 +22,6 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
-  if (module.hot) {
-    module.hot.accept();
-    module.hot.dispose(() => app.close());
-  }
-
   app.enableVersioning({
     defaultVersion: [VERSION_NEUTRAL, '1', '2'],
     type: VersioningType.URI,
@@ -31,7 +30,15 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
 
+  app.useGlobalPipes(new ValidationPipe());
+
   generateDocument(app);
-  await app.listen(3000);
+
+  await app.listen(3300);
+  if (module.hot) {
+    module.hot.accept();
+    module.hot.dispose(() => app.close());
+  }
+  console.log('http://localhost:3300/api/doc#/');
 }
 bootstrap();

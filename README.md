@@ -5,7 +5,7 @@
 
 学习目的，前端想多认识一下接口开发，运维，数据库等知识
 
-
+[Swagger UI](http://localhost:3000/api/doc#/)
 
 ## 额外的 CHANGELOG 配置
 
@@ -959,4 +959,239 @@ YAML的了解点击[链接](https://link.juejin.cn/?target=https%3A%2F%2Fbaike.b
 
    
 
-4. 
+#### 调用飞书 API
+
+根据文档描述，飞书提供了下述 **3** 种访问凭证，分别有不同的用途
+
+| 访问凭证类型        | 是否需要用户授权 | 是否需要租户管理员授权 | 适用的应用场景                 |
+| ------------------- | ---------------- | ---------------------- | ------------------------------ |
+| app_access_token    | 不需要           | 不需要                 | 纯后台服务等                   |
+| tenant_access_token | 不需要           | 需要                   | 网页应用、机器人、纯后台服务等 |
+| user_access_token   | 需要             | 不需要                 | 小程序、网页应用等             |
+
+
+
+调用三方接口获取凭证后，再使用凭证调用 **API** 的链路过程比较长，同时也可能收网络波动、请求频率的限制，需要将凭证缓存在本地，等有效期小于 **30** 分钟时再去换取新的凭证，减少调用链接、降低请求频率。
+
+
+
+`NestJS` 提供了**高速缓存**的插件 `cache-manager`，为对各种缓存存储提供程序提供了统一的 `API`，内置的是内存中的数据存储。
+
+**缓存封装**
+
+1. 安装 依赖 @types
+
+   ```
+   yarn add cache-manager 
+   yarn add -D @types/cache-manager
+   ```
+
+   
+
+2. 注册 Module
+
+   设置`src/user/user.module.ts`
+
+   ```ts
+   import { Module } from '@nestjs/common';
+   import { FeishuController } from './feishu/feishu.controller';
+   
+   @Module({
+     controllers: [UserController, FeishuController],
+     providers: [UserService, FeishuService],
+   })
+   export class UserModule {}
+   ```
+
+   使用的 `Module` 中全局注册 `CacheModule`，配置`app.module.ts`
+
+   ```ts
+   import { Module, CacheModule } from '@nestjs/common';
+   
+   @Module({
+     imports: [
+       CacheModule.register({
+         isGlobal: true,
+       }),
+     ],
+   })
+   export class AppModule {}
+   ```
+
+   
+
+3. 配置 feishu.service
+
+   ```ts
+   import { CACHE_MANAGER, Inject, Injectable } from '@nestjs/common';
+   import {
+     getAppToken,
+   } from 'src/helper/feishu/auth';
+   import { Cache } from 'cache-manager';
+   import { BusinessException } from '@/common/exceptions/business.exception';
+   import { ConfigService } from '@nestjs/config';
+   
+   @Injectable()
+   export class FeishuService {
+     private APP_TOKEN_CACHE_KEY;
+     constructor(
+       @Inject(CACHE_MANAGER) private cacheManager: Cache,
+       private configService: ConfigService,
+     ) {
+       this.APP_TOKEN_CACHE_KEY = this.configService.get('APP_TOKEN_CACHE_KEY');
+     }
+   
+     async getAppToken() {
+       let appToken: string;
+       appToken = await this.cacheManager.get(this.APP_TOKEN_CACHE_KEY);
+       if (!appToken) {
+         const response = await getAppToken();
+         if (response.code === 0) {
+           // token 有效期为 2 小时，在此期间调用该接口 token 不会改变。当 token 有效期小于 30 分的时候,再次请求获取 token 的时候，会生成一个新的 token，与此同时老的 token 依然有效。
+           appToken = response.app_access_token;
+           this.cacheManager.set(this.APP_TOKEN_CACHE_KEY, appToken, {
+             ttl: response.expire - 60,
+           });
+         } else {
+           throw new BusinessException('飞书调用异常');
+         }
+       }
+       return appToken;
+     }
+   }
+   ```
+
+   
+
+#### 飞书机器人
+
+封装完应用凭证之后就可以使用凭证调用飞书的 Open API
+
+1. 首先需要开启机器人的能力。
+
+   [飞书开放平台 (feishu.cn)](https://open.feishu.cn/apps/cli_a24534bd9ce39013/bot)
+
+2. 发布应用并选择应用使用范围，如果不在应用可用范围的用户，机器人是没办法推送消息的。
+
+3. 封装机器人发送消息对应的 API。
+
+   发送消息的接口为 [open.feishu.cn/open-apis/i…](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fopen-apis%2Fim%2Fv1%2Fmessages%3Freceive_id_type%3D%5B%5D) ，可用根据以下几种类型发送消息给指定的用户或群组
+
+   `Query 参数 receive_id_type` **可选值**：
+
+   - `open_id`：以 open_id 来识别用户([什么是 Open ID](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fdocument%2Fhome%2Fuser-identity-introduction%2Fopen-id)) 。
+   - `user_id`：以 user_id 来识别用户，需要有获取用户 userID 的权限 ([什么是 User ID](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fdocument%2Fhome%2Fuser-identity-introduction%2Fuser-id))。
+   - `union_id`：以 union_id 来识别用户([什么是 Union ID](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fdocument%2Fhome%2Fuser-identity-introduction%2Funion-id))。
+   - `email`：以 email 来识别用户，是用户的真实邮箱。
+   - `chat_id`：以 chat_id 来识别群聊，群 ID 说明请参考：[群ID 说明](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fdocument%2FuAjLw4CM%2FukTMukTMukTM%2Freference%2Fim-v1%2Fchat-id-description) 。
+
+   根据发送用户与信息的类型有如下几种参数。
+
+   `Body` **参数**：
+
+   | 名称       | 类型   | 必填 | 描述                                                         |
+   | ---------- | ------ | ---- | ------------------------------------------------------------ |
+   | receive_id | string | 是   | 依据 receive_id_type 的值，填写对应的消息接收者 id**示例值**："ou_7d8a6e6df7621556ce0d21922b676706ccs" |
+   | content    | string | 是   | 消息内容，json 结构序列化后的字符串。不同msg_type对应不同内容。消息类型 包括：text、post、image、file、audio、media、sticker、interactive、share_chat、share_user等，具体格式说明参考：[发送消息content说明](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fdocument%2FuAjLw4CM%2FukTMukTMukTM%2Fim-v1%2Fmessage%2Fcreate_json) |
+   | msg_type   | string | 是   | 消息类型 包括：text、post、image、file、audio、media、sticker、interactive、share_chat、share_user等，类型定义请参考[发送消息content说明](https://link.juejin.cn/?target=https%3A%2F%2Fopen.feishu.cn%2Fdocument%2FuAjLw4CM%2FukTMukTMukTM%2Fim-v1%2Fmessage%2Fcreate_json) |
+
+4. 封装如下的函数
+
+   ```ts
+   // src/helper/feishu/message.ts
+   
+   import { methodV } from 'src/utils/request';
+   
+   export enum RECEIVE_TYPE { 'open_id', 'user_id', 'union_id', 'email', 'chat_id' }
+   
+   export enum MSG_TYPE { text, post, image, file, audio, media, sticker, interactive, share_chat, share_user}
+   
+   type MESSAGES_PARAMS = {
+     receive_id: string
+     content: string
+     msg_type: MSG_TYPE
+   }
+   
+   export const messages = async (receive_id_type: RECEIVE_TYPE, params: MESSAGES_PARAMS, app_token: string) => {
+     console.log(receive_id_type, params, app_token)
+   
+     const { data } = await methodV({
+       url: `/im/v1/messages`,
+       method: 'POST',
+       query: { receive_id_type },
+       params,
+       headers: {
+         Authorization: `Bearer ${app_token}`,
+       },
+     });
+     return data;
+   };
+   ```
+
+5. 开发对应的 `Service`
+
+   ```ts
+   // src/user/feishu/feishu.service.ts
+   
+   async sendMessage(receive_id_type, params) {
+       const app_token = await this.getAppToken()
+       return messages(receive_id_type, params, app_token as string)
+     }
+   ```
+
+   注意：这里的 `app_token` 获取方式使用上述封装好的访问凭证方法，带有缓存的版本。
+
+   
+
+6. 开发对应的 `Controller` 以及 `Dto`。
+
+   ```ts
+   // src/user/feishu/feishu.controller.ts
+   
+   import { Body, Controller, Post } from '@nestjs/common';
+   import { ApiOperation, ApiTags } from '@nestjs/swagger';
+   import { FeishuService } from './feishu.service';
+   import { FeishuMessageDto } from './feishu.dto';
+   
+   @ApiTags('飞书')
+   @Controller('feishu')
+   export class FeishuController {
+     constructor(private readonly feishuService: FeishuService) {}
+   
+     @ApiOperation({
+       summary: '消息推送',
+     })
+     @Post('sendMessage')
+     sendMessage(@Body() params: FeishuMessageDto) {
+       const { receive_id_type, ...rest } = params;
+       return this.feishuService.sendMessage(receive_id_type, rest);
+     }
+   }
+   ```
+
+   ```ts
+   // src/user/feishu/feishu.dto.ts
+   
+   import { RECEIVE_TYPE, MSG_TYPE } from '@/helper/feishu/message';
+   import { ApiProperty } from '@nestjs/swagger';
+   
+   export class FeishuMessageDto {
+     @ApiProperty({ example: 'email' })
+     receive_id_type: RECEIVE_TYPE;
+   
+     @ApiProperty({ example: 'cookieboty@qq.com' })
+     receive_id?: string;
+   
+     @ApiProperty({ example: '{"text":" test content"}' })
+     content?: string;
+   
+     @ApiProperty({ example: 'text', enum: MSG_TYPE })
+     msg_type?: keyof MSG_TYPE;
+   }
+   ```
+
+   
+
+7.  完成飞书机器人发送信息~
+
+   swagger中点击 **Try it out** 发送测试信息，如果按照步骤一路下来的话，应该能正常收到飞书机器人推送的消息了。

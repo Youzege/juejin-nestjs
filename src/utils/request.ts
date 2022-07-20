@@ -48,6 +48,7 @@ const methodV = async ({
   } else {
     sendUrl = `${FEISHU_URL}${url}`;
   }
+  console.log(sendUrl);
   try {
     return new Promise((resolve, reject) => {
       axios({
