@@ -642,3 +642,321 @@ YAML的了解点击[链接](https://link.juejin.cn/?target=https%3A%2F%2Fbaike.b
    ```
 
    [Swagger UI ](http://localhost:3000/api/doc)查看API文档
+
+### 二、 飞书应用对接
+
+飞书等企业工具，提高很多开发接口API，例如机器人、消息通知、文档等。
+
+
+
+#### 封装底层请求库
+
+`NestJS` 内置了 `@nestjs/axios` 请求库，对于飞书的 `Open API` 封装，还是利用之前的模式，不将它与 `NestJS` 过度的耦合在一起。
+
+
+
+1. 添加应用配置，更新yaml配置
+
+   ```
+   FEISHU_CONFIG:
+     FEISHU_URL: https://open.feishu.cn/open-apis
+     FEISHU_API_HOST: https://open.feishu.cn
+     FEISHU_APP_ID: balabalabala
+     FEISHU_APP_SECRET: balabalabala
+   ```
+
+   
+
+2. 建 `utils/request.ts` 文件
+
+   ```ts
+   // src/utils/request.ts
+   
+   import axios, { Method } from 'axios';
+   import { getConfig } from './index';
+   
+   const {
+     FEISHU_CONFIG: { FEISHU_URL },
+   } = getConfig();
+   
+   /**
+    * @description: 任意请求
+    */
+   const request = async ({ url, option = {} }) => {
+     try {
+       return axios.request({
+         url,
+         ...option,
+       });
+     } catch (error) {
+       throw error;
+     }
+   };
+   
+   interface IMethodV {
+     url: string;
+     method?: Method;
+     headers?: { [key: string]: string };
+     params?: Record<string, unknown>;
+     query?: Record<string, unknown>;
+   }
+   
+   export interface IRequest {
+     data: any;
+     code: number;
+   }
+   
+   /**
+    * @description: 带 version 的通用 api 请求
+    */
+   const methodV = async ({
+     url,
+     method,
+     headers,
+     params = {},
+     query = {},
+   }: IMethodV): Promise<IRequest> => {
+     let sendUrl = '';
+     if (/^(http:\/\/|https:\/\/)/.test(url)) {
+       sendUrl = url;
+     } else {
+       sendUrl = `${FEISHU_URL}${url}`;
+     }
+     try {
+       return new Promise((resolve, reject) => {
+         axios({
+           headers: {
+             'Content-Type': 'application/json; charset=utf-8',
+             ...headers,
+           },
+           url: sendUrl,
+           method,
+           params: query,
+           data: {
+             ...params,
+           },
+         })
+           .then(({ data, status }) => {
+             resolve({ data, code: status });
+           })
+           .catch((error) => {
+             reject(error);
+           });
+       });
+     } catch (error) {
+       throw error;
+     }
+   };
+   
+   export { request, methodV };
+   ```
+
+   
+
+3. 创建飞书基础层
+
+   ```
+   src/helper/feishu
+     auth.ts
+     const.ts
+     type.ts
+     user.ts
+   ```
+
+   **auth.ts**
+
+   ```ts
+   
+   import { APP_ID, APP_SECRET } from './const';
+   
+   import { methodV } from '@/utils/request';
+   
+   export type GetAppTokenRes = {
+     code: number;
+     msg: string;
+     app_access_token: string;
+     expire: number;
+   };
+   
+   export const getUserToken = async ({ code, app_token }) => {
+     const { data } = await methodV({
+       url: `/authen/v1/access_token`,
+       method: 'POST',
+       headers: {
+         Authorization: `Bearer ${app_token}`,
+       },
+       params: {
+         grant_type: 'authorization_code',
+         code,
+       },
+     });
+     return data;
+   };
+   
+   export const refreshUserToken = async ({ refreshToken, app_token }) => {
+     const { data } = await methodV({
+       url: `/authen/v1/refresh_access_token`,
+       method: 'POST',
+       headers: {
+         Authorization: `Bearer ${app_token}`,
+       },
+       params: {
+         grant_type: 'refresh_token',
+         refresh_token: refreshToken,
+         app_token,
+       },
+     });
+     return data;
+   };
+   
+   export const getUserAccessToken = async (code) => {
+     const { data } = await methodV({
+       url: `/suite/passport/oauth/token`,
+       method: 'POST',
+       params: {
+         grant_type: 'authorization_code',
+         code,
+         app_id: APP_ID,
+         app_secret: APP_SECRET,
+       },
+     });
+     return data as GetAppTokenRes;
+   };
+   
+   
+   export const getAppToken = async () => {
+     const { data } = await methodV({
+       url: `/auth/v3/app_access_token/internal`,
+       method: 'POST',
+       params: {
+         app_id: APP_ID,
+         app_secret: APP_SECRET,
+       },
+     });
+     return data as GetAppTokenRes;
+   };
+   ```
+
+   
+
+   **const.ts**
+
+   ```ts
+   /*
+    * @Author: Cookie
+    * @Description:
+    */
+   
+   import { getConfig } from '@/utils';
+   
+   const { FEISHU_CONFIG } = getConfig();
+   
+   export const APP_ID = FEISHU_CONFIG.FEISHU_APP_ID;
+   export const APP_SECRET = FEISHU_CONFIG.FEISHU_APP_SECRET;
+   ```
+
+   
+
+   **type.ts**
+
+   ```ts
+   export interface CreateApprovalParams {
+     approval_code: string;
+     user_id: string;
+     form: string;
+   }
+   
+   export interface GetApprovalDefinedParams {
+     approval_code: string;
+   }
+   
+   export interface GetApprovalInstanceParams {
+     instance_code: string;
+     user_id?: string;
+     open_id?: string;
+   }
+   ```
+
+   
+
+   **user.ts**
+
+   ```ts
+   import { methodV } from '@/utils/request';
+   
+   export const getUserInfo = async (user_token: string) => {
+     const { data } = await methodV({
+       url: `/authen/v1/user_info`,
+       method: 'GET',
+       headers: {
+         Authorization: `Bearer ${user_token}`,
+       },
+     });
+     return data;
+   };
+   
+   /**
+    * 获取通信录单个用户信息
+    * @param feishuUserId
+    * @param user_token
+    * @returns
+    */
+   export const getSingleUserInfo = async (
+     feishuUserId: string,
+     token: string,
+   ) => {
+     const { data } = await methodV({
+       url: `/contact/v3/users/${feishuUserId}`,
+       method: 'GET',
+       query: {
+         user_id_type: 'user_id',
+       },
+       headers: {
+         Authorization: `Bearer ${token}`,
+       },
+     });
+     return data;
+   };
+   
+   /**
+    * 获取用户列表
+    * @param app_token
+    * @returns
+    */
+   export const getUserListByDepartmentId = async (department_id: string, app_token: string) => {
+     const { data } = await methodV({
+       url: `https://open.feishu.cn/open-apis/contact/v3/users`,
+       // url: `/contact/v3/users/find_by_department`,
+       method: 'GET',
+       query: {
+         department_id_type: 'department_id',
+         department_id,
+         page_size: 50,
+       },
+       headers: {
+         Authorization: `Bearer ${app_token}`,
+       },
+     });
+     return data;
+   };
+   
+   
+   export const getEmployeeTypeEnums = async ({ app_token }) => {
+     const { data } = await methodV({
+       url: `/contact/v3/employee_type_enums`,
+       method: 'GET',
+       query: {
+         page_token: 1,
+         page_size: 100,
+       },
+       headers: {
+         Authorization: `Bearer ${app_token}`,
+       },
+     });
+     return data;
+   };
+   ```
+
+   
+
+4. 
