@@ -1195,3 +1195,55 @@ YAML的了解点击[链接](https://link.juejin.cn/?target=https%3A%2F%2Fbaike.b
 7.  完成飞书机器人发送信息~
 
    swagger中点击 **Try it out** 发送测试信息，如果按照步骤一路下来的话，应该能正常收到飞书机器人推送的消息了。
+
+#### 完善错误提示
+
+返回的接口是业务性质的通用报错 503，但我们已经预先知道了请求参数类型有几种，这种错误可以在请求飞书之后就预先校验出来，减少请求次数同时给予用户正确的反馈，我们可以借助 `class-validator` 来做入参校验
+
+1. 安装 `class-validator` 相关的依赖
+
+   ```
+   yarn add class-validator class-transformer
+   ```
+
+   
+
+2. `main.ts` 添加 `ValidationPipe` 验证管道，从 `@nestjs/common` 导出
+
+   ```ts
+   app.useGlobalPipes(new ValidationPipe());
+   ```
+
+   
+
+3. 使用 `class-validator` 内置的验证装饰器对需要验证的 Dto 参数添加校验
+
+   ```ts
+   // src\user\feishu\feishu.dto.ts
+   
+   import { RECEIVE_TYPE, MSG_TYPE } from '@/helper/feishu/message';
+   import { ApiProperty } from '@nestjs/swagger';
+   import { IsNotEmpty, IsEnum } from 'class-validator';
+   
+   export class FeishuMessageDto {
+     @IsNotEmpty()
+     @IsEnum(RECEIVE_TYPE)
+     @ApiProperty({ example: 'email', enum: RECEIVE_TYPE })
+     receive_id_type: RECEIVE_TYPE;
+   
+     @IsNotEmpty()
+     @ApiProperty({ example: 'cookieboty@qq.com' })
+     receive_id?: string;
+   
+     @IsNotEmpty()
+     @ApiProperty({ example: '{"text":" test content"}' })
+     content?: string;
+   
+     @IsNotEmpty()
+     @IsEnum(MSG_TYPE)
+     @ApiProperty({ example: 'text', enum: MSG_TYPE })
+     msg_type?: keyof MSG_TYPE;
+   }
+   ```
+
+   
