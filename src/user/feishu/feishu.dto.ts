@@ -9,11 +9,11 @@ export class FeishuMessageDto {
   receive_id_type: RECEIVE_TYPE;
 
   @IsNotEmpty()
-  @ApiProperty({ example: 'cookieboty@qq.com' })
+  @ApiProperty({ example: 'youzegehq@gmail.com' })
   receive_id?: string;
 
   @IsNotEmpty()
-  @ApiProperty({ example: '{"text":" test content"}' })
+  @ApiProperty({ example: '{"text":"欢迎来到喜东东的组织 🤭"}' })
   content?: string;
 
   @IsNotEmpty()

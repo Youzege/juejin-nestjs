@@ -1,7 +1,3 @@
-/*
- * @Author: Cookie
- * @Description: business.error.codes
- */
 export const BUSINESS_ERROR_CODE = {
   // 公共错误码
   COMMON: 10001,
